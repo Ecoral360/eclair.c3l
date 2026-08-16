@@ -5,8 +5,8 @@ import eclair;
 import eclair::route;
 
 
-fn String hello() @Route({ GET, "/hello" }) {
-  return "Hello world!\n";
+fn String hello(String id) @Route({ GET, "/hello" }) {
+  return string::tformat("Hello %s!\n", id);
 }
 
 

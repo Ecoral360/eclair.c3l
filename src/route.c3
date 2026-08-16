@@ -76,7 +76,7 @@ macro Route @to_route(#cb) {
             res.set_body(result);
 
           $case ser::@is_serializable(result):
-            res.set_body(ser::serialize(&&json::serializer(), result)!.to_string()!);
+            res.set_body(json::tstring_serialize(result))!;
 
         $endswitch
     $endswitch
@@ -100,143 +100,38 @@ macro Route @to_route(#cb) {
 }
 
 macro @call_cb($cb, $config, #req, #res) @local {
-  var $params = $Typeof($cb)::params;
-
-  any[$params.len ?: 1] args = {};
-
-  $foreach $i, $param : $params:
-    do {
+  var $ParamStruct = $Typeof($cb)::param_struct;
+  $if $ParamStruct == void:
+    return $cb();
+  $else
+    $Typefrom($ParamStruct) params;
+    $foreach $member : $ParamStruct::members:
       $switch:
-        $case $param.type == Request*:
-          args[$i] = &#req;
+        $case $member.type == Request*:
+          params.$member = #req;
 
-        $case $param.type == Response*:
-          args[$i] = &#res;
+        $case $member.type == Response*:
+          params.$member = #res;
 
         $default:
-          var result = @parse_param_value($param.type, $param.name, #req);
-          $if $defined(result!):
-            if (catch result) {
-              result!;
-              return INVALID_PARAM~;
-            }
-          $endif
-          args[$i] = &result;
+          if (try result = @parse_param_value{$member.type}($member.name, #req)) {
+            params.$member = result;
+          }
+        // if (catch result) {
+        //   result!;
+        //   return INVALID_PARAM~;
+        // }
       $endswitch
-    };
-  $endforeach
+    $endforeach
 
-  $switch $params.len:
-    $case 0:
-      return $cb();
-
-    $case 1:
-      return $cb(@acast(args[0], $params[0]));
-
-    $case 2:
-      return $cb(@acast(args[0], $params[0]), @acast(args[1], $params[1]));
-
-    $case 3:
-      return $cb(@acast(args[0], $params[0]), @acast(args[1], $params[1]), @acast(args[2], $params[2]));
-
-    $case 4:
-      return $cb(@acast(args[0], $params[0]), @acast(args[1], $params[1]), @acast(args[2], $params[2]), @acast(args[3], $params[3]));
-
-    $case 5:
-      return $cb(@acast(args[0], $params[0]), @acast(args[1], $params[1]), @acast(args[2], $params[2]), @acast(args[3], $params[3]), @acast(args[4], $params[4]));
-
-    $case 6:
-      return $cb(
-        @acast(args[0], $params[0]), 
-        @acast(args[1], $params[1]), 
-        @acast(args[2], $params[2]), 
-        @acast(args[3], $params[3]), 
-        @acast(args[4], $params[4]),
-        @acast(args[5], $params[5]),
-      );
-
-    $case 7:
-      return $cb(
-        @acast(args[0], $params[0]), 
-        @acast(args[1], $params[1]), 
-        @acast(args[2], $params[2]), 
-        @acast(args[3], $params[3]), 
-        @acast(args[4], $params[4]),
-        @acast(args[5], $params[5]),
-        @acast(args[6], $params[6]),
-      );
-
-    $case 8:
-      return $cb(
-        @acast(args[0], $params[0]), 
-        @acast(args[1], $params[1]), 
-        @acast(args[2], $params[2]), 
-        @acast(args[3], $params[3]), 
-        @acast(args[4], $params[4]),
-        @acast(args[5], $params[5]),
-        @acast(args[6], $params[6]),
-        @acast(args[7], $params[7]),
-      );
-
-    $case 9:
-      return $cb(
-        @acast(args[0], $params[0]), 
-        @acast(args[1], $params[1]), 
-        @acast(args[2], $params[2]), 
-        @acast(args[3], $params[3]), 
-        @acast(args[4], $params[4]),
-        @acast(args[5], $params[5]),
-        @acast(args[6], $params[6]),
-        @acast(args[7], $params[7]),
-        @acast(args[8], $params[8]),
-      );
-
-    $case 10:
-      return $cb(
-        @acast(args[0], $params[0]), 
-        @acast(args[1], $params[1]), 
-        @acast(args[2], $params[2]), 
-        @acast(args[3], $params[3]), 
-        @acast(args[4], $params[4]),
-        @acast(args[5], $params[5]),
-        @acast(args[6], $params[6]),
-        @acast(args[7], $params[7]),
-        @acast(args[8], $params[8]),
-        @acast(args[9], $params[9]),
-      );
-
-    $default:
-      $error "Too many argument " +++ $param.len;
-
-  $endswitch
+    return $cb(...params);
+  $endif
 }
 
-macro @acast(arg, $param) {
-  return *anycast(arg, $Typefrom($param.type));
-}
-
-macro @call_cb_old($cb, req, res) @local {
-  var $params = $Typeof($cb)::params;
-
-  $switch:
-    $case $Typeof($cb)::params.len == 0:
-      return $cb();
-
-    $case $Typeof($cb)::params[0].type == Request* &&& ($Typeof($cb)::params.len == 1 ||| $Typeof($cb)::params[1].type != Response*):
-      return $cb(req);
-  
-    $case $Typeof($cb)::params.len == 1 &&& $Typeof($cb)::params[0].type == Response*:
-      return $cb(res);
-
-    $default:
-      return $cb(req, res);
-  $endswitch
-}
-
-macro @parse_param_value($type, $name, #req) {
-  $Typefrom($type) $val;
+macro Type? @parse_param_value($name, #req) <Type> {
+  Type $val;
   $if @is_maybe($val):
-    var result = @parse_param_value($Typeof($val.value), $name, #req);
+    var result = @parse_param_value{$Typeof($val)::generic_args[0]}($name, #req);
     $if $defined(result!):
       if (catch result) {
         return $val;
@@ -246,11 +141,11 @@ macro @parse_param_value($type, $name, #req) {
   $endif
 
   $switch:
-    $case $type == String:
+    $case Type == String:
       String p = #req.params[$name] ?? #req.query[$name]!;
       return p;
 
-    $case $type == bool:
+    $case Type? == bool:
       String p = #req.params[$name] ?? #req.query[$name]!;
       p.convert_to_lower();
       switch (p) {
@@ -263,7 +158,7 @@ macro @parse_param_value($type, $name, #req) {
           return INVALID_PARAM~;
       }
 
-    $case $type == int:
+    $case Type == int:
       String p = #req.params[$name] ?? #req.query[$name]!;
       int? i = p.to_int();
       if (catch i) {
@@ -272,7 +167,7 @@ macro @parse_param_value($type, $name, #req) {
       }
       return i;
 
-    $case $type == char:
+    $case Type == char:
       String p = #req.params[$name] ?? #req.query[$name]!;
       if (p.len != 1) {
         io::eprintfn("Error: expected char value for %s, got %s", $name, p);
@@ -280,17 +175,17 @@ macro @parse_param_value($type, $name, #req) {
       }
       return p[0];
 
-    $case des::@is_deserializable($type):
+    $case des::@is_deserializable(Type):
       String p = #req.body();
-      $Typefrom($type)? v = des::deserialize{$type}(&&json::deserializer(p));
+      Type? v = json::tdeserialize{Type}(p);
       if (catch v) {
-        io::eprintfn("Error while deserializing the param (%s) %s with value: %s", $type.nameof, $name, p);
+        io::eprintfn("Error while deserializing the param (%s) %s with value: %s", Type::name, $name, p);
         return INVALID_PARAM~;
       }
       return v;
 
     $default:
-      $error @sprintf("A value of type %s cannot be deserialize", $type.nameof);
+      $error @sprintf("A value of type %s cannot be deserialize", Type::name);
   $endswitch
 }
 
