@@ -15,7 +15,7 @@ struct Router {
 fn Router new_router(String prefix) {
   List{Route} routes;
   routes.init(mem);
-  prefix = prefix.strip_end("/");
+  prefix = prefix.strip_suffix("/");
   return { .routes = routes, .prefix = prefix };
 }
 

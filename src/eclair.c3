@@ -32,12 +32,12 @@ fn void request_handler(HttpRequest* _req) @private {
   defer query.free();
 
   if (target.contains("?")) {
-    usz idx = target.index_of_char('?')!!;
+    sz idx = target.index_of("?")!!;
     String query_str = target[idx + 1..];
     target = target[..idx - 1];
     foreach (query_arg : query_str.split(mem, "&")) {
       if (query_arg.contains("=")) {
-        usz eq_idx = query_arg.index_of_char('=')!!;
+        sz eq_idx = query_arg.index_of("=")!!;
         String query_key = query_arg[..eq_idx - 1];
         String query_val = query_arg[eq_idx + 1..];
         query.set(query_key, query_val);
@@ -48,7 +48,7 @@ fn void request_handler(HttpRequest* _req) @private {
   }
   req.query = query;
 
-  target = target.strip_end("/");
+  target = target.strip_suffix("/");
 
   if (!root_router.dispatch_target(target, target, &req, &res)) {
     res.set_status(404);

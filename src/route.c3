@@ -47,13 +47,13 @@ fn HashMap{String, String}? Route.match_target(&self, String[] target) {
 }
 
 <* 
-  @require #cb.has_tagof("eclair:route")
-  @require $typeof(#cb.tagof("eclair:route")) == RouteConfig
+  @require $reflect(#cb).has_tag("eclair:route")
+  @require $Typeof($reflect(#cb).get_tag("eclair:route")) == RouteConfig
 *>
 macro Route @to_route(#cb) {
-  RouteConfig $config = #cb.tagof("eclair:route");
-  var $return_void = $typeof(#cb).returns == void;
-  var $return_void_opt = $typeof(#cb).returns == void?;
+  RouteConfig $config = $reflect(#cb).get_tag("eclair:route");
+  var $return_void = $Typeof(#cb)::returns == void;
+  var $return_void_opt = $Typeof(#cb)::returns == void?;
 
   var $cb = &#cb;
   var handler = fn void?(Request* req, Response* res) {
@@ -72,7 +72,7 @@ macro Route @to_route(#cb) {
         $endif
 
         $switch:
-          $case $typeof(result) == String:
+          $case $Typeof(result) == String:
             res.set_body(result);
 
           $case ser::@is_serializable(result):
@@ -100,9 +100,9 @@ macro Route @to_route(#cb) {
 }
 
 macro @call_cb($cb, $config, #req, #res) @local {
-  var $params = $typeof($cb).paramsof;
+  var $params = $Typeof($cb)::params;
 
-  any[$params.len] args = {};
+  any[$params.len ?: 1] args = {};
 
   $foreach $i, $param : $params:
     do {
@@ -212,20 +212,20 @@ macro @call_cb($cb, $config, #req, #res) @local {
 }
 
 macro @acast(arg, $param) {
-  return *anycast(arg, $typefrom($param.type));
+  return *anycast(arg, $Typefrom($param.type));
 }
 
 macro @call_cb_old($cb, req, res) @local {
-  var $params = $typeof($cb).paramsof;
+  var $params = $Typeof($cb)::params;
 
   $switch:
-    $case $typeof($cb).paramsof.len == 0:
+    $case $Typeof($cb)::params.len == 0:
       return $cb();
 
-    $case $typeof($cb).paramsof[0].type == Request* &&& ($typeof($cb).paramsof.len == 1 ||| $typeof($cb).paramsof[1].type != Response*):
+    $case $Typeof($cb)::params[0].type == Request* &&& ($Typeof($cb)::params.len == 1 ||| $Typeof($cb)::params[1].type != Response*):
       return $cb(req);
   
-    $case $typeof($cb).paramsof.len == 1 &&& $typeof($cb).paramsof[0].type == Response*:
+    $case $Typeof($cb)::params.len == 1 &&& $Typeof($cb)::params[0].type == Response*:
       return $cb(res);
 
     $default:
@@ -234,15 +234,15 @@ macro @call_cb_old($cb, req, res) @local {
 }
 
 macro @parse_param_value($type, $name, #req) {
-  $typefrom($type) $val;
+  $Typefrom($type) $val;
   $if @is_maybe($val):
-    var result = @parse_param_value($typeof($val.value), $name, #req);
+    var result = @parse_param_value($Typeof($val.value), $name, #req);
     $if $defined(result!):
       if (catch result) {
         return $val;
       }
     $endif
-    return maybe::value{$typeof($val.value)}(result);
+    return maybe::value{$Typeof($val.value)}(result);
   $endif
 
   $switch:
@@ -282,7 +282,7 @@ macro @parse_param_value($type, $name, #req) {
 
     $case des::@is_deserializable($type):
       String p = #req.body();
-      $typefrom($type)? v = des::deserialize{$type}(&&json::deserializer(p));
+      $Typefrom($type)? v = des::deserialize{$type}(&&json::deserializer(p));
       if (catch v) {
         io::eprintfn("Error while deserializing the param (%s) %s with value: %s", $type.nameof, $name, p);
         return INVALID_PARAM~;
@@ -294,9 +294,89 @@ macro @parse_param_value($type, $name, #req) {
   $endswitch
 }
 
+// For future use
+macro @nb_required_params(#cb) @local {
+  var $cb = &#cb;
+  var $params = $Typeof($cb)::params;
+
+  any[$params.len ?: 1] args = {};
+
+  $foreach $i, $param : $params:
+    args[$i] = &&($Typefrom($param.type)) {};
+  $endforeach
+
+  $switch:
+    $case $defined($cb()):
+      return $params.len;
+
+    $case $defined($cb(@acast(args[0], $params[0]))):
+      return $params.len - ($params.len - 1);
+
+    $case $defined($cb(@acast(args[0], $params[0]), @acast(args[1], $params[1]))):
+      return $params.len - ($params.len - 2);
+
+    $case $defined($cb(@acast(args[0], $params[0]), @acast(args[1], $params[1]), @acast(args[2], $params[2]))):
+      return $params.len - ($params.len - 3);
+
+    $case $defined($cb(
+        @acast(args[0], $params[0]), 
+        @acast(args[1], $params[1]), 
+        @acast(args[2], $params[2]), 
+        @acast(args[3], $params[3]), 
+      )):
+      return $params.len - ($params.len - 4);
+
+    $case $defined($cb(
+        @acast(args[0], $params[0]), 
+        @acast(args[1], $params[1]), 
+        @acast(args[2], $params[2]), 
+        @acast(args[3], $params[3]), 
+        @acast(args[4], $params[4]),
+      )):
+      return $params.len - ($params.len - 5);
+
+    $case $defined($cb(
+        @acast(args[0], $params[0]), 
+        @acast(args[1], $params[1]), 
+        @acast(args[2], $params[2]), 
+        @acast(args[3], $params[3]), 
+        @acast(args[4], $params[4]),
+        @acast(args[5], $params[5]),
+      )):
+      return $params.len - ($params.len - 6);
+
+    $case $defined($cb(
+        @acast(args[0], $params[0]), 
+        @acast(args[1], $params[1]), 
+        @acast(args[2], $params[2]), 
+        @acast(args[3], $params[3]), 
+        @acast(args[4], $params[4]),
+        @acast(args[5], $params[5]),
+        @acast(args[6], $params[6]),
+      )):
+      return $params.len - ($params.len - 7);
+
+    $case $defined($cb(
+        @acast(args[0], $params[0]), 
+        @acast(args[1], $params[1]), 
+        @acast(args[2], $params[2]), 
+        @acast(args[3], $params[3]), 
+        @acast(args[4], $params[4]),
+        @acast(args[5], $params[5]),
+        @acast(args[6], $params[6]),
+        @acast(args[7], $params[7]),
+      )):
+      return $params.len - ($params.len - 8);
+
+    $default:
+      $error "Too many argument " +++ $param.len;
+
+  $endswitch
+}
+
 macro @is_maybe($value) {
   return ($defined($value.get) &&& $defined($value.get()) &&& 
-          ($defined($value.get()!) ||| $defined($value == maybe::value{$typeof($value.value)}($value.value))));
+          ($defined($value.get()!) ||| $defined($value == maybe::value{$Typeof($value.value)}($value.value))));
 }
 
 

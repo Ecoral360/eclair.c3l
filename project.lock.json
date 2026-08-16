@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "packages": [
+    {
+      "name": "dessert",
+      "repo": "Ecoral360/dessert.c3l",
+      "origin": "github",
+      "path": "lib/dessert.c3l",
+      "zip": false,
+      "ref": "",
+      "commit": "8a3f69794ef63d56c044c3f8734442fbd45c7f63"
+    }
+  ]
+}

@@ -1,29 +1,43 @@
 {
-  "langrev": "1",
-  "warnings": [
-    "no-unused"
+  "authors": [
+    "Mathis Laroche <ecomath360@gmail.com>"
+  ],
+  "build-dir": "build",
+  "cpu": "generic",
+  "dependencies": [
+    "dessert"
   ],
   "dependency-search-paths": [
     "lib"
   ],
-  "dependencies": ["dessert"],
-  "authors": [
-    "John Doe <john.doe@example.com>"
-  ],
-  "version": "0.1.0",
+  "langrev": "1",
+  "opt": "O0",
+  "output": "build",
   "sources": [
     "src/**"
   ],
-  "test-sources": [
-    "test/**"
-  ],
-  "build-dir": "build",
-  "output": "build",
   "targets": {
     "eclair": {
       "type": "executable"
+    },
+    "example": {
+      "c-include-dirs": [
+        "csource/include"
+      ],
+      "c-sources": [
+        "csource/**"
+      ],
+      "features": [
+        "ECLAIR_EXAMPLE"
+      ],
+      "type": "executable"
     }
   },
-  "cpu": "generic",
-  "opt": "O0"
+  "test-sources": [
+    "test/**"
+  ],
+  "version": "0.1.0",
+  "warnings": [
+    "no-unused"
+  ]
 }
