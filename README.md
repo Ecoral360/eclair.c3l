@@ -16,7 +16,7 @@ The framework leverages C3's powerful macro system to provide a declarative, att
 - **Path Parameters**: Capture dynamic segments from URLs - just add a matching parameter (e.g., `int id` for `/todos/:id`)
 - **Query Parameters**: Access query string parameters - add parameters like `Maybe{bool} completed` for optional query params
 - **JSON Body Parsing**: Automatically deserialize JSON request bodies - add a struct parameter and it's automatically parsed
-- **Full requset control**: Use a `Request*` parameter to control everything yourself
+- **Full request control**: Use a `Request*` parameter to control everything yourself
 - **Maybe Types**: Use `Maybe{T}` for optional query parameters and `Maybe{T}` for optional return values (returns JSON or null)
 - **Fault Handling**: Make your return type `T?` for error responses with automatic 500 error handling
 - **Routers**: Group routes under a common prefix and include them in the server (sub-routers also supported)
@@ -30,7 +30,6 @@ module example;
 
 import std::io;
 import eclair;
-import eclair::route;
 
 fn String hello() @Route({ GET, "/hello" }) {
   return "Hello world!\n";
@@ -50,15 +49,41 @@ fn int main(String[] args) {
 }
 ```
 
+`import eclair;` is enough to get `Server`, `Router`, `Request`, `Response` and the `@Route` attribute.
+
 ## Installation
 
-Get started with eclair: 
-1. Make sure you have the [C3 compiler installed](https://github.com/c3lang/c3c)
-2. Run `c3c init <YOUR_PROJECT>`
-3. Clone this repository into `<YOUR_PROJECT>/lib/eclair.c3l`
-4. Clone the [dessert](https://github.com/Ecoral360/dessert) repository into `<YOUR_PROJECT>/lib/dessert.c3l`
-5. Add `"dependencies": ["eclair", "dessert"]` to your `project.json`
-6. You are done ! Enjoy writing your REST API in C3 !
+Make sure you have the [C3 compiler installed](https://github.com/c3lang/c3c), version 0.8.4 or later.
+
+### Using [`c3po`](https://github.com/Ecoral360/c3po)
+
+In your project, run
+
+```sh
+c3po add ecoral360/eclair
+```
+
+This installs eclair into `lib/eclair.c3l`, pulls [dessert](https://github.com/Ecoral360/dessert.c3l) (the serialization library eclair uses) as a transitive dependency, and adds both to your `project.json`.
+
+### Manually
+
+1. Run `c3c init <YOUR_PROJECT>`
+2. Clone this repository into `<YOUR_PROJECT>/lib/eclair.c3l`
+3. Clone the [dessert](https://github.com/Ecoral360/dessert.c3l) repository into `<YOUR_PROJECT>/lib/dessert.c3l`
+4. Add `"dependencies": ["eclair", "dessert"]` to your `project.json`
+5. You are done ! Enjoy writing your REST API in C3 !
+
+### Platform support
+
+Eclair ships prebuilt target configurations for Linux (x64, x86, aarch64, riscv32/64), macOS (x64, aarch64), FreeBSD, NetBSD, OpenBSD and Android (aarch64). Windows is **not** supported yet, since the underlying `httpserver.h` backend relies on epoll/kqueue.
+
+## Running the bundled example
+
+This repository contains a small example server behind the `ECLAIR_EXAMPLE` feature flag (`src/main.c3`):
+
+```sh
+c3c run example   # listens on http://localhost:8080, try /hello/world?greeting=Hi
+```
 
 ## How It Works
 
@@ -71,6 +96,8 @@ Server server = eclair::new_server(); // port will be 8080
 Server server = eclair::new_server(5444); // port will be 5444
 ```
 
+`server.listen()` prints every registered route, then blocks and serves requests.
+
 ### Routes
 
 Routes are defined using the `@Route` attribute with an HTTP method and path. The macro system automatically handles parameter inference:
@@ -81,21 +108,44 @@ fn String my_handler() @Route({ GET, "/path" }) {
 }
 ```
 
+Handlers are registered with `server.@add_route(handler)` (or `router.@add_route(handler)`), which reads the `@Route` tag at compile time.
+
 Handler functions can have parameters automatically inferred:
 - `Request*` - The request object
 - `Response*` - The response object
 - `int`, `String`, `bool`, `char` - Path or query parameters (matching `:param` in path or `param` in query string)
 - Any deserializable type (`deserializable struct`, `Maybe{deserializable struct}`, `List{deserializable struct}`, or `deserializable struct[]`) - Automatically parsed from the request body
-(see [dessert](https://github.com/Ecoral360/dessert) for more info on deserializable types)
+(see [dessert](https://github.com/Ecoral360/dessert.c3l) for more info on deserializable types)
 - `Maybe{int | String | bool | char}` - Optional query parameters
+
+Path parameters take precedence over query parameters: a parameter is first looked up in `req.params`, then in `req.query`.
 
 Handler functions can return different types:
 - `String` - Automatically set as the response body
 - Any serializable type (`serializable struct`, `Maybe{serializable struct}`, `List{serializable struct}`, or `serializable struct[]`) - Automatically serialized to JSON
-(see [dessert](https://github.com/Ecoral360/dessert) for more info on serializable types)
+(see [dessert](https://github.com/Ecoral360/dessert.c3l) for more info on serializable types)
 - `Maybe{T}` - Returns the value as JSON, or `null` if empty
 - `T?` - Returns the value as JSON, or 500 error if the handler returns a `fault`
-- `void` - Lets the handler function deal with the response
+- `void` / `void?` - Lets the handler function deal with the response
+
+Unmatched targets get an automatic `404`.
+
+### Serializable types
+
+Eclair uses [dessert](https://github.com/Ecoral360/dessert.c3l) for JSON. Derive the `serialize` / `deserialize` methods on the structs you send or receive:
+
+```c3
+import dessert;
+
+$expand(dessert::@derive(Todo));
+struct Todo {
+  int id;
+  String title;
+  bool completed;
+}
+```
+
+Pass `serialize` or `deserialize` as a second argument to derive only one of them.
 
 ### Path Parameters
 
@@ -122,6 +172,8 @@ fn List{Todo} get_todos(Maybe{bool} completed) @Route({ GET, "/todos" }) {
   // Access with `if (try value = completed.get()) { ... }` or `completed.get() ?? default_value`
 }
 ```
+
+A flag without a value (`?completed`) is stored with the flag name as its value.
 
 ### JSON Request Bodies
 
@@ -152,6 +204,8 @@ fn void main() {
 }
 ```
 
+Routers nest: use `parent_router.include_router(child_router)` to build a prefix tree. A router's route paths are relative to its prefix.
+
 ### Request and Response
 
 The `Request` and `Response` types give you access to the HTTP transaction:
@@ -162,6 +216,11 @@ fn void handler(Request* req, Response* res) @Route({ GET, "/example" }) {
   String target = req.target();
   HTTPMethod method = req.method();
   String body = req.body();
+  String id = req.params["id"]!!;     // path parameters
+  String q = req.query["q"]!!;        // query parameters
+
+  // Deserialize the body yourself
+  MyStruct? parsed = req.json_body_as(MyStruct);
 
   // Set response
   res.set_status(200);
@@ -184,6 +243,8 @@ fn Todo? get_todo(int id) @Route({ GET, "/todos/:id" }) {
 }
 ```
 
+A parameter that fails to parse (e.g. `abc` for an `int id`) is left at its zero value and logged on stderr; wrap it in `Maybe{T}` if you want to detect that yourself.
+
 ## Complete Example
 
 See [todo.c3](todo.c3) for a full REST API example with CRUD operations:
@@ -194,30 +255,19 @@ module example::todo;
 import std;
 import eclair;
 import dessert;
-import json;
 
+$expand(dessert::@derive(Todo));
 struct Todo {
   int id;
   String title;
   bool completed;
 }
 
-fn void? Todo.serialize(&self, Serializer serializer) =>
-  ser::impl_serialize(self, serializer);
-
-fn void? Todo.deserialize(&self, Deserializer deserializer) =>
-  des::impl_deserialize(self, deserializer);
-
+$expand(dessert::@derive(TodoInput));
 struct TodoInput {
   String title;
   bool completed;
 }
-
-fn void? TodoInput.serialize(&self, Serializer serializer) =>
-  ser::impl_serialize(self, serializer);
-
-fn void? TodoInput.deserialize(&self, Deserializer deserializer) =>
-  des::impl_deserialize(self, deserializer);
 
 // Query parameter - optional (?completed=true or ?completed=false)
 fn List{Todo} get_todos(Maybe{bool} completed) @Route({ GET, "/" }) { /* ... */ }
@@ -226,7 +276,7 @@ fn List{Todo} get_todos(Maybe{bool} completed) @Route({ GET, "/" }) { /* ... */ 
 fn Todo? create_todo(TodoInput input) @Route({ POST, "/" }) { /* ... */ }
 
 // Path parameter - matches :id in route
-fn Maybe{Todo}? get_todo(int id) @Route({ GET, "/:id" }) { /* ... */ }
+fn Maybe{Todo} get_todo(int id) @Route({ GET, "/:id" }) { /* ... */ }
 
 // Multiple parameters combined
 fn Todo? update_todo(int id, TodoInput input) @Route({ PUT, "/:id" }) { /* ... */ }
@@ -238,7 +288,7 @@ fn Todo? delete_todo(Request* req) @Route({ DELETE, "/:id" }) {
 }
 
 fn String hello(Maybe{String} name) @Route({ GET, "/hello" }) {
-  return string::format(mem, "Hello, %s!", name.get() ?? "Stranger");
+  return string::tformat("Hello, %s!", name.get() ?? "Stranger");
 }
 
 fn int main(String[] args) {
@@ -258,6 +308,14 @@ fn int main(String[] args) {
 }
 ```
 
+```sh
+curl localhost:8080/hello?name=Bob                                       # Hello, Bob!
+curl -X POST localhost:8080/todos -d '{"title":"buy milk","completed":false}'
+                                        # {"id":1,"title":"buy milk","completed":false}
+curl localhost:8080/todos                # [{"id":1,"title":"buy milk","completed":false}]
+curl localhost:8080/todos/99             # null
+```
+
 ## Backend
 
 Eclair uses [httpserver.h](https://github.com/jeremycw/httpserver.h) as its HTTP server backend. This is a minimal, fast C library that handles the low-level socket communication and HTTP parsing, allowing eclair to focus on providing a pleasant API surface.
@@ -266,7 +324,7 @@ Eclair uses [httpserver.h](https://github.com/jeremycw/httpserver.h) as its HTTP
 
 `Eclair` has two meaning. 
 1. It means lightning in French and represents the goal of making it as fast to write in as possible.
-2. The deserializer and serializer lib used by eclair is [dessert](https://github.com/Ecoral360/dessert) and `eclair (au chocolat)` is a pastry.
+2. The deserializer and serializer lib used by eclair is [dessert](https://github.com/Ecoral360/dessert.c3l) and `eclair (au chocolat)` is a pastry.
 
 ## License
 

@@ -145,7 +145,7 @@ macro Type? @parse_param_value($name, #req) <Type> {
       String p = #req.params[$name] ?? #req.query[$name]!;
       return p;
 
-    $case Type? == bool:
+    $case Type == bool:
       String p = #req.params[$name] ?? #req.query[$name]!;
       p.convert_to_lower();
       switch (p) {

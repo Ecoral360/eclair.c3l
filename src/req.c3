@@ -29,7 +29,7 @@ fn String Request.body(&self) {
 
 
 macro Request.json_body_as(&self, $Output) {
-  return des::deserialize{$Output}(&&json::deserializer(self.body()));
+  return des::deserialize{$Output}(&&json::tdeserializer(self.body()));
 }
 
 
