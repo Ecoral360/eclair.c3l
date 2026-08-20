@@ -10,11 +10,6 @@ macro @show(#expr) {
   io::printfn("%s: %s", $stringify(#expr), #expr);
 }
 
-struct Server {
-  HttpServer *server;
-  int port;
-}
-
 // We need this to be global because we need to access it in request_handler
 Router root_router;
 
